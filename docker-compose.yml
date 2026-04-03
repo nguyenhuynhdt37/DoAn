@@ -14,13 +14,9 @@ services:
       - "1433:1433"
     volumes:
       - db_data:/var/opt/mssql
-      - mdf_attach:/mdf   # shared volume – SQL Server đọc MDF/LDF từ đây
+      - mdf_attach:/mdf # shared volume – SQL Server đọc MDF/LDF từ đây
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U SA -P 'YourStrong@Password123' -Q 'SELECT 1' -C -b",
-        ]
+      test: [ "CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U SA -P 'YourStrong@Password123' -Q 'SELECT 1' -C -b" ]
       interval: 10s
       timeout: 5s
       retries: 15
@@ -34,15 +30,15 @@ services:
   db-init:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: doan_db_init
-    user: root                               # cần root để ghi vào shared volume
+    user: root # cần root để ghi vào shared volume
     restart: "no"
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - ./DoAn.mdf:/src/DoAn.mdf:ro       # mount file MDF từ host
-      - ./DoAn_log.ldf:/src/DoAn_log.ldf:ro  # mount file LDF từ host
-      - mdf_attach:/mdf                    # shared volume với db container
+      - ./DoAn.mdf:/src/DoAn.mdf:ro # mount file MDF từ host
+      - ./DoAn_log.ldf:/src/DoAn_log.ldf:ro # mount file LDF từ host
+      - mdf_attach:/mdf # shared volume với db container
     environment:
       SA_PASSWORD: "YourStrong@Password123"
       ACCEPT_EULA: "Y"
@@ -76,9 +72,7 @@ services:
   # ─────────────────────────────────────────────
   web:
     build:
-      context: .
-      dockerfile: Dockerfile
-    image: doan-web:latest
+    image: nguyenhuynh04/doan-web:latest
     container_name: doan_web
     restart: unless-stopped
     ports:
@@ -87,8 +81,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: >-
-        Server=db,1433;Database=DoAn;User Id=SA;Password=YourStrong@Password123;
-        TrustServerCertificate=True;MultipleActiveResultSets=True;
+        Server=db,1433;Database=DoAn;User Id=SA;Password=YourStrong@Password123; TrustServerCertificate=True;MultipleActiveResultSets=True;
     depends_on:
       db:
         condition: service_healthy
@@ -104,7 +97,7 @@ volumes:
   db_data:
     driver: local
   mdf_attach:
-    driver: local   # volume trung gian để truyền MDF/LDF sang SQL Server
+    driver: local # volume trung gian để truyền MDF/LDF sang SQL Server
 
 networks:
   doan_net:
