@@ -71,8 +71,7 @@ services:
   # ASP.NET Core Web Application
   # ─────────────────────────────────────────────
   web:
-    build:
-    image: nguyenhuynh04/doan-web:latest
+    image: doan-web:latest
     container_name: doan_web
     restart: unless-stopped
     ports:
