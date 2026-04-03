@@ -1,0 +1,111 @@
+services:
+  # ─────────────────────────────────────────────
+  # SQL Server Database
+  # ─────────────────────────────────────────────
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: doan_db
+    restart: unless-stopped
+    environment:
+      SA_PASSWORD: "YourStrong@Password123"
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Express"
+    ports:
+      - "1433:1433"
+    volumes:
+      - db_data:/var/opt/mssql
+      - mdf_attach:/mdf   # shared volume – SQL Server đọc MDF/LDF từ đây
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U SA -P 'YourStrong@Password123' -Q 'SELECT 1' -C -b",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+    networks:
+      - doan_net
+
+  # ─────────────────────────────────────────────
+  # Database Initialization – attach MDF/LDF (chạy 1 lần)
+  # ─────────────────────────────────────────────
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: doan_db_init
+    user: root                               # cần root để ghi vào shared volume
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./DoAn.mdf:/src/DoAn.mdf:ro       # mount file MDF từ host
+      - ./DoAn_log.ldf:/src/DoAn_log.ldf:ro  # mount file LDF từ host
+      - mdf_attach:/mdf                    # shared volume với db container
+    environment:
+      SA_PASSWORD: "YourStrong@Password123"
+      ACCEPT_EULA: "Y"
+    entrypoint: >
+      /bin/bash -c "
+        echo '📂 Copying MDF/LDF to shared volume...';
+        cp /src/DoAn.mdf /mdf/DoAn.mdf;
+        cp /src/DoAn_log.ldf /mdf/DoAn_log.ldf;
+        chmod 660 /mdf/DoAn.mdf /mdf/DoAn_log.ldf;
+        chown 10001:0 /mdf/DoAn.mdf /mdf/DoAn_log.ldf 2>/dev/null || true;
+        echo '🔗 Attaching database DoAn...';
+        /opt/mssql-tools18/bin/sqlcmd -S db -U SA -P 'YourStrong@Password123' -C -b -Q \"
+          IF DB_ID('DoAn') IS NULL
+          BEGIN
+            CREATE DATABASE [DoAn]
+            ON (FILENAME = '/mdf/DoAn.mdf'),
+               (FILENAME = '/mdf/DoAn_log.ldf')
+            FOR ATTACH;
+            PRINT 'Database DoAn attached successfully.';
+          END
+          ELSE
+            PRINT 'Database DoAn already exists, skipping attach.';
+        \";
+        echo '✅ Database initialization complete!';
+      "
+    networks:
+      - doan_net
+
+  # ─────────────────────────────────────────────
+  # ASP.NET Core Web Application
+  # ─────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: doan-web:latest
+    container_name: doan_web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: >-
+        Server=db,1433;Database=DoAn;User Id=SA;Password=YourStrong@Password123;
+        TrustServerCertificate=True;MultipleActiveResultSets=True;
+    depends_on:
+      db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    networks:
+      - doan_net
+
+# ─────────────────────────────────────────────
+# Volumes & Networks
+# ─────────────────────────────────────────────
+volumes:
+  db_data:
+    driver: local
+  mdf_attach:
+    driver: local   # volume trung gian để truyền MDF/LDF sang SQL Server
+
+networks:
+  doan_net:
+    driver: bridge
